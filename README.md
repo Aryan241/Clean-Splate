@@ -9,9 +9,9 @@ Evaluated on the 12 scenes of the [Nerfbusters](https://ethanweber.me/nerfbuster
 1. **Train** an initial splat per scene with [OpenSplat](https://github.com/pierotofy/OpenSplat) (5,000 steps) from the COLMAP poses (`run_all.sh`).
 2. **Mask** the object in every frame (`generate_masks_sam2.py`, `run_all_masks.sh`). Grounding DINO (tiny) finds the prompted object in the first frame, and SAM 2.1 (Hiera-L) video propagation tracks its mask through the capture. Each scene runs in a separate process, which keeps memory stable on Apple Silicon (MPS).
 3. **Vote** (`01_extract_objects.py`). Each Gaussian's centre is projected into every view. It gains a vote when it lands inside the mask and loses one when it lands outside. A Gaussian is kept if its normalised vote exceeds a threshold γ.
-4. **Evaluate** (`02_evaluate_pipeline_tuned.py`): file size, run time and peak memory of the voting step, and PSNR, SSIM and LPIPS inside the object mask (see below).
+4. **Evaluate** (`02_evaluate_pipeline.py`): file size, run time and peak memory of the voting step, and PSNR, SSIM and LPIPS inside the object mask (see below). `02_evaluate_pipeline_tuned.py` is the same script with a per-scene γ.
 
-γ trades the two failure modes. A low γ keeps floaters and background; a high γ removes thin or occluded parts of the object. No single value worked for every scene, so γ was set per scene (from −0.2 to 0.6; `SCENE_GAMMAS` in the evaluation script, `tune.sh` for quick trials).
+γ trades the two failure modes. A low γ keeps floaters and background; a high γ removes thin or occluded parts of the object. No single value worked well for every scene, so per-scene values (from −0.2 to 0.6) are set in `SCENE_GAMMAS` in `02_evaluate_pipeline_tuned.py`, with `tune.sh` for quick trials.
 
 ## Results
 
@@ -30,7 +30,7 @@ Evaluated on the 12 scenes of the [Nerfbusters](https://ethanweber.me/nerfbuster
 | roses | 27.3 → 7.1 | 73.8% | 2.2 | 89 | 15.76 → 20.23 | 0.815 → 0.849 | 0.164 → 0.112 |
 | table | 42.8 → 2.5 | 94.1% | 3.0 | 112 | 22.27 → 27.21 | 0.959 → 0.984 | 0.089 → 0.035 |
 
-Full numbers: `evaluation_report.md`, `.csv`, `.json`.
+Full numbers: `evaluation_report.md`, `.csv`, `.json`. These results were produced with a single γ = 0.1 for every scene (`02_evaluate_pipeline.py`); the per-scene values were added afterwards and have not been re-evaluated.
 
 **How to read these numbers.**
 
@@ -55,14 +55,14 @@ python 01_extract_objects.py --scene_dir /path/to/nerfbusters/aloe \
   --ply_in /path/to/nerfbusters/opensplat_results/aloe_splat.ply \
   --ply_out /path/to/nerfbusters/extracted_results/aloe_extracted.ply --gamma 0.1
 
-# 4. extract and evaluate all scenes with the per-scene gammas
-DATA_ROOT=/path/to/nerfbusters python 02_evaluate_pipeline_tuned.py
+# 4. extract and evaluate all scenes (single gamma; use the _tuned script for per-scene gammas)
+DATA_ROOT=/path/to/nerfbusters python 02_evaluate_pipeline.py
 ```
 
 Each scene directory is expected to contain `images/` (or `images_4/`), `cameras.json`, `colmap/sparse`, and, after step 2, `masks/`.
 
 ## Limitations
 
-- γ must be tuned per scene.
+- γ needs tuning per scene, and the tuned values have not yet been evaluated.
 - The vote uses only each Gaussian's centre, ignoring its size and opacity, so large or semi-transparent Gaussians near the object boundary can be misclassified.
 - The result depends on the quality of the text-prompted masks.
